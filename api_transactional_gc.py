@@ -1,59 +1,105 @@
+import azure.functions as func
 import logging
-import json
 import pyodbc
+import json
 import os
-from azure.functions import HttpRequest, HttpResponse
 
 # Conexión a la base de datos
 class DatabaseConnection:
     def __init__(self):
-        self.server = os.getenv('SQL_SERVER')
-        self.database = os.getenv('SQL_DATABASE')
-        self.username = os.getenv('SQL_USERNAME')
-        self.password = os.getenv('SQL_PASSWORD')
+        self.server = os.getenv("SQL_SERVER")
+        self.database = os.getenv("SQL_DATABASE")
+        self.username = os.getenv("SQL_USERNAME")
+        self.password = os.getenv("SQL_PASSWORD")
         self.driver = '{ODBC Driver 17 for SQL Server}'
         self.connection = None
 
     def connect(self):
         try:
             self.connection = pyodbc.connect(
-                f'DRIVER={self.driver};SERVER={self.server};DATABASE={self.database};UID={self.username};PWD={self.password}'
+                f"DRIVER={self.driver};SERVER={self.server};DATABASE={self.database};UID={self.username};PWD={self.password};Connection Timeout=30"
             )
             return self.connection
         except Exception as e:
-            logging.error(f"Database connection error: {str(e)}")
+            logging.error(f"Error connecting to database: {str(e)}")
             raise
 
 # Validar transacciones
 class DataValidator:
     @staticmethod
-    def validate(transaction):
-        required_fields = ["id", "name", "datetime", "department_id", "job_id"]
+    def validate_hired_employee(data):
+        required_fields = ["FirstName", "LastName", "HireDate", "JobID", "DepartmentID"]
         for field in required_fields:
-            if field not in transaction or transaction[field] is None:
-                return False, f"Field {field} is missing or null."
+            if field not in data or data[field] is None:
+                return False, f"{field} is missing or null."
         return True, None
 
-# Insertar datos
+    @staticmethod
+    def validate_department(data):
+        if "DepartmentName" not in data or data["DepartmentName"] is None:
+            return False, "DepartmentName is missing or null."
+        return True, None
+
+    @staticmethod
+    def validate_job(data):
+        if "JobTitle" not in data or data["JobTitle"] is None:
+            return False, "JobTitle is missing or null."
+        return True, None
+
+#Insertar en BD
 class DataInserter:
     def __init__(self, connection):
         self.connection = connection
         self.cursor = self.connection.cursor()
 
-    def insert_transaction(self, transaction):
+    def insert_hired_employee(self, employee):
         try:
             self.cursor.execute(
-                "INSERT INTO GlobantPoc.HiredEmployees (id, name, datetime, department_id, job_id) VALUES (?, ?, ?, ?, ?)",
-                transaction["id"],
-                transaction["name"],
-                transaction["datetime"],
-                transaction["department_id"],
-                transaction["job_id"]
+                "INSERT INTO GlobantPoc.HiredEmployees (FirstName, LastName, HireDate, JobID, DepartmentID) VALUES (?, ?, ?, ?, ?)",
+                employee["FirstName"],
+                employee["LastName"],
+                employee["HireDate"],
+                employee["JobID"],
+                employee["DepartmentID"]
             )
-            return True
+            return True, None 
         except Exception as e:
-            logging.error(f"Error inserting transaction: {str(e)}")
+            logging.error(f"Error inserting employee: {str(e)}")
+            return False, str(e)     
+
+    def insert_department(self, department):
+        try:
+            self.cursor.execute(
+                "INSERT INTO GlobantPoc.Departments (DepartmentName) VALUES (?)",
+                department["DepartmentName"]
+            )
+            return True, None
+        except Exception as e:
+            logging.error(f"Error inserting department: {str(e)}")
             return False, str(e)
+
+    def insert_job(self, job):
+        try:
+            self.cursor.execute(
+                "INSERT INTO GlobantPoc.Jobs (JobTitle) VALUES (?)",
+                job["JobTitle"]
+            )
+            return True, None
+        except Exception as e:
+            logging.error(f"Error inserting job: {str(e)}")
+            return False, str(e)   
+
+    def log_transaction_error(self, transaction_type, transaction_data, error_message):
+            try:
+                self.cursor.execute(
+                    "INSERT INTO GlobantPoc.TransactionLogs (TransactionType, TransactionData, ErrorMessage) VALUES (?, ?, ?)",
+                    transaction_type,
+                    json.dumps(transaction_data),
+                    error_message
+                )
+                self.connection.commit()
+            except Exception as e:
+                logging.error(f"Error logging transaction: {str(e)}")               
 
     def commit(self):
         self.connection.commit()
@@ -62,54 +108,98 @@ class DataInserter:
         self.cursor.close()
         self.connection.close()
 
-# Registro de errores
+# Log errores de transacciones
 class ErrorLogger:
-    @staticmethod
-    def log_error(transaction, error_message):
+    def __init__(self):
+        self.failed_transactions = []
+
+    def log_error(self, transaction, error_message):
         logging.error(f"Transaction failed: {transaction}, Error: {error_message}")
-        return {"transaction": transaction, "error": error_message}
+        self.failed_transactions.append({"transaction": transaction, "error": error_message})
+
+    def get_errors(self):
+        return self.failed_transactions
 
 # Main API
 class API_Transactional_GC:
     def __init__(self):
         self.db_connection = DatabaseConnection()
 
-    def process_request(self, req: HttpRequest) -> HttpResponse:
-        try:
-            req_body = req.get_json()
-            transactions = req_body.get("transactions")
+    def process_batch(self, transactions, transaction_type):
+        connection = self.db_connection.connect()
+        data_inserter = DataInserter(connection)
+        error_logger = ErrorLogger()
 
-            if not transactions:
-                return HttpResponse("No data provided", status_code=400)
-            
-            connection = self.db_connection.connect()
-            data_inserter = DataInserter(connection)
+        successful_inserts = 0
 
-            successful_inserts = 0
-            failed_inserts = []
-            
-            for transaction in transactions:
-                is_valid, error_message = DataValidator.validate(transaction)
+        for transaction in transactions:
+            if transaction_type == "HiredEmployees":
+                is_valid, error_message = DataValidator.validate_hired_employee(transaction)
                 if not is_valid:
-                    failed_inserts.append(ErrorLogger.log_error(transaction, error_message))
+                    error_logger.log_error(transaction, error_message)
                     continue
+                success, insert_error = data_inserter.insert_hired_employee(transaction)
+            elif transaction_type == "Departments":
+                is_valid, error_message = DataValidator.validate_department(transaction)
+                if not is_valid:
+                    error_logger.log_error(transaction, error_message)
+                    continue
+                success, insert_error = data_inserter.insert_department(transaction)
+            elif transaction_type == "Jobs":
+                is_valid, error_message = DataValidator.validate_job(transaction)
+                if not is_valid:
+                    error_logger.log_error(transaction, error_message)
+                    continue
+                success, insert_error = data_inserter.insert_job(transaction)
+            else:
+                error_logger.log_error(transaction, "Invalid transaction type.")
+                continue
 
-                success, insert_error = data_inserter.insert_transaction(transaction)
-                if success:
-                    successful_inserts += 1
-                else:
-                    failed_inserts.append(ErrorLogger.log_error(transaction, insert_error))
+            if success:
+                successful_inserts += 1
+            else:
+                error_logger.log_error(transaction, insert_error)
 
-            data_inserter.commit()
-            data_inserter.close()
+        data_inserter.commit()
+        data_inserter.close()
 
-            response = {
-                "successCount": successful_inserts,
-                "failureCount": len(failed_inserts),
-                "errors": failed_inserts
-            }
-            return HttpResponse(json.dumps(response), status_code=200)
+        response = {
+            "successCount": successful_inserts,
+            "failureCount": len(error_logger.get_errors()),
+            "errors": error_logger.get_errors()
+        }
+        return response
 
-        except Exception as e:
-            logging.error(f"An error occurred: {str(e)}")
-            return HttpResponse("An error occurred", status_code=500)
+# AF HTTP
+app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
+
+@app.route(route="InsertData")
+def insert_data(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        # Obtén el cuerpo de la solicitud
+        req_body = req.get_json()
+        transaction_type = req_body.get("transactionType")
+        transactions = req_body.get("transactions")
+
+        if not transaction_type or not transactions or not isinstance(transactions, list):
+            return func.HttpResponse(
+                json.dumps({"error": "Transaction type and a list of transactions are required"}),
+                status_code=400,
+                mimetype="application/json"
+            )
+
+        api = API_Transactional_GC()
+        result = api.process_batch(transactions, transaction_type)
+
+        return func.HttpResponse(
+            json.dumps(result),
+            status_code=200,
+            mimetype="application/json"
+        )
+    except Exception as e:
+        logging.error(f"Error: {str(e)}")
+        return func.HttpResponse(
+            json.dumps({"error": str(e)}),
+            status_code=500,
+            mimetype="application/json"
+        )
