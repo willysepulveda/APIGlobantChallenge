@@ -4,7 +4,7 @@ import pyodbc
 import os
 from azure.functions import HttpRequest, HttpResponse
 
-# Clase para manejar la conexión a la base de datos
+# Conexión a la base de datos
 class DatabaseConnection:
     def __init__(self):
         self.server = os.getenv('SQL_SERVER')
@@ -24,7 +24,7 @@ class DatabaseConnection:
             logging.error(f"Database connection error: {str(e)}")
             raise
 
-# Clase para validar las transacciones
+# Validar transacciones
 class DataValidator:
     @staticmethod
     def validate(transaction):
@@ -34,7 +34,7 @@ class DataValidator:
                 return False, f"Field {field} is missing or null."
         return True, None
 
-# Clase para insertar los datos en la base de datos
+# Insertar datos
 class DataInserter:
     def __init__(self, connection):
         self.connection = connection
@@ -62,14 +62,14 @@ class DataInserter:
         self.cursor.close()
         self.connection.close()
 
-# Clase para registrar errores
+# Registro de errores
 class ErrorLogger:
     @staticmethod
     def log_error(transaction, error_message):
         logging.error(f"Transaction failed: {transaction}, Error: {error_message}")
         return {"transaction": transaction, "error": error_message}
 
-# Clase principal de la API
+# Main API
 class API_Transactional_GC:
     def __init__(self):
         self.db_connection = DatabaseConnection()
@@ -81,15 +81,13 @@ class API_Transactional_GC:
 
             if not transactions:
                 return HttpResponse("No data provided", status_code=400)
-
-            # Conectar a la base de datos
+            
             connection = self.db_connection.connect()
             data_inserter = DataInserter(connection)
 
             successful_inserts = 0
             failed_inserts = []
-
-            # Validar e insertar cada transacción
+            
             for transaction in transactions:
                 is_valid, error_message = DataValidator.validate(transaction)
                 if not is_valid:
@@ -102,11 +100,9 @@ class API_Transactional_GC:
                 else:
                     failed_inserts.append(ErrorLogger.log_error(transaction, insert_error))
 
-            # Confirmar las inserciones
             data_inserter.commit()
             data_inserter.close()
 
-            # Responder con un resumen
             response = {
                 "successCount": successful_inserts,
                 "failureCount": len(failed_inserts),
