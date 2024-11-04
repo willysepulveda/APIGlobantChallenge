@@ -13,7 +13,7 @@ class DatabaseConnection:
         self.database = os.getenv("SQL_DATABASE")
         self.username = os.getenv("SQL_USERNAME")
 
-        if os.getenv("ENVIRONMENT") == "LOCAL": #LOCAL for local test or AZURE to test in cloud
+        if os.getenv("ENVIRONMENT") == "AZURE":  #LOCAL for local test or AZURE to test in cloud
             
             credential = DefaultAzureCredential()
             key_vault_url = os.getenv("KEY_VAULT_URL")
