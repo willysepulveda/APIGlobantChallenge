@@ -4,3 +4,5 @@
 
 azure-functions
 pyodbc
+azure-identity
+azure-keyvault-secrets
