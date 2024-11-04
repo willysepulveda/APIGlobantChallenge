@@ -31,12 +31,12 @@ class DataValidator:
         self.connection = connection
         self.cursor = self.connection.cursor()
 
-    def validate_hired_employee(data):
+    def validate_hired_employee(self, transaction):
         required_fields = ["FirstName", "LastName", "HireDate", "JobID", "DepartmentID"]
         for field in required_fields:
-            if field not in data or data[field] is None:
+            if field not in transaction or transaction[field] is None:
                 return False, f"{field} is missing or null."
-        
+
         # Validar que el department_id exista en Departments
         self.cursor.execute("SELECT COUNT(*) FROM GlobantPoc.Departments WHERE DepartmentID = ?", transaction["DepartmentID"])
         if self.cursor.fetchone()[0] == 0:
@@ -47,7 +47,7 @@ class DataValidator:
         if self.cursor.fetchone()[0] == 0:
             return False, "JobID does not exist in Jobs."
 
-        return True, None    
+        return True, None   
 
     @staticmethod
     def validate_department(data):
