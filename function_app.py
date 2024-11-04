@@ -1,9 +1,9 @@
 import azure.functions as func
-from api_transactional_gc import API_Transactional_GC, DatabaseConnection,DataInserter
+from api_transactional_gc import API_Transactional_GC, DatabaseConnection,DataInserter,DataValidator
 import json
 import logging
 
-# Instancia Azure Function
+
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
 
@@ -23,38 +23,43 @@ def insert_data(req: func.HttpRequest) -> func.HttpResponse:
                 mimetype="application/json"
             )
 
-        # Crear una instancia de DataInserter
+        # Crear una instancia de DataInserter y DataValidator
         connection = DatabaseConnection().connect()
         data_inserter = DataInserter(connection)
+        data_validator = DataValidator(connection)  # Instancia del validador con conexión
 
         success_count = 0
         failure_count = 0
         errors = []
 
         for transaction in transactions:
+            # Validar según el tipo de transacción
             if transaction_type == "HiredEmployees":
-                success, error_message = data_inserter.insert_hired_employee(transaction)
+                is_valid, error_message = data_validator.validate_hired_employee(transaction)
+                if is_valid:
+                    success, error_message = data_inserter.insert_hired_employee(transaction)
             elif transaction_type == "Departments":
-                success, error_message = data_inserter.insert_department(transaction)
+                is_valid, error_message = DataValidator.validate_department(transaction)
+                if is_valid:
+                    success, error_message = data_inserter.insert_department(transaction)
             elif transaction_type == "Jobs":
-                success, error_message = data_inserter.insert_job(transaction)
+                is_valid, error_message = DataValidator.validate_job(transaction)
+                if is_valid:
+                    success, error_message = data_inserter.insert_job(transaction)
             else:
                 success = False
                 error_message = "Invalid transaction type."
 
-            if success:
+            if is_valid and success:
                 success_count += 1
             else:
                 failure_count += 1
                 errors.append({"transaction": transaction, "error": error_message})
-                
-                # Registrar el error en TransactionLogs
                 data_inserter.log_transaction_error(transaction_type, transaction, error_message)
 
         # Cerrar la conexión a la base de datos
         connection.close()
 
-        # Devolver la respuesta
         return func.HttpResponse(
             json.dumps({
                 "successCount": success_count,
@@ -71,4 +76,5 @@ def insert_data(req: func.HttpRequest) -> func.HttpResponse:
             status_code=500,
             mimetype="application/json"
         )
+
 

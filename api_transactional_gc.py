@@ -26,13 +26,28 @@ class DatabaseConnection:
 
 # Validar transacciones
 class DataValidator:
-    @staticmethod
+    #@staticmethod
+    def __init__(self, connection):
+        self.connection = connection
+        self.cursor = self.connection.cursor()
+
     def validate_hired_employee(data):
         required_fields = ["FirstName", "LastName", "HireDate", "JobID", "DepartmentID"]
         for field in required_fields:
             if field not in data or data[field] is None:
                 return False, f"{field} is missing or null."
-        return True, None
+        
+        # Validar que el department_id exista en Departments
+        self.cursor.execute("SELECT COUNT(*) FROM GlobantPoc.Departments WHERE DepartmentID = ?", transaction["DepartmentID"])
+        if self.cursor.fetchone()[0] == 0:
+            return False, "DepartmentID does not exist in Departments."
+
+        # Validar que el job_id exista en Jobs
+        self.cursor.execute("SELECT COUNT(*) FROM GlobantPoc.Jobs WHERE JobID = ?", transaction["JobID"])
+        if self.cursor.fetchone()[0] == 0:
+            return False, "JobID does not exist in Jobs."
+
+        return True, None    
 
     @staticmethod
     def validate_department(data):
@@ -62,6 +77,7 @@ class DataInserter:
                 employee["JobID"],
                 employee["DepartmentID"]
             )
+            self.connection.commit() 
             return True, None 
         except Exception as e:
             logging.error(f"Error inserting employee: {str(e)}")
@@ -73,6 +89,7 @@ class DataInserter:
                 "INSERT INTO GlobantPoc.Departments (DepartmentName) VALUES (?)",
                 department["DepartmentName"]
             )
+            self.connection.commit() 
             return True, None
         except Exception as e:
             logging.error(f"Error inserting department: {str(e)}")
@@ -84,6 +101,7 @@ class DataInserter:
                 "INSERT INTO GlobantPoc.Jobs (JobTitle) VALUES (?)",
                 job["JobTitle"]
             )
+            self.connection.commit() 
             return True, None
         except Exception as e:
             logging.error(f"Error inserting job: {str(e)}")
@@ -97,6 +115,7 @@ class DataInserter:
                     json.dumps(transaction_data),
                     error_message
                 )
+                self.connection.commit() 
                 self.connection.commit()
             except Exception as e:
                 logging.error(f"Error logging transaction: {str(e)}")               
