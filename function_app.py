@@ -7,7 +7,7 @@ import logging
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
 
-@app.route(route="InsertData")
+@app.route(route="InsertData",  methods=["POST"])
 def insert_data(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Processing InsertData request...')
 
