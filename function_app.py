@@ -26,29 +26,32 @@ def insert_data(req: func.HttpRequest) -> func.HttpResponse:
         # Crear una instancia de DataInserter y DataValidator
         connection = DatabaseConnection().connect()
         data_inserter = DataInserter(connection)
-        data_validator = DataValidator(connection)  # Instancia del validador con conexión
+        data_validator = DataValidator(connection)
 
         success_count = 0
         failure_count = 0
         errors = []
 
+        is_valid = False
+        error_message = None
+
         for transaction in transactions:
-            # Validar según el tipo de transacción
             if transaction_type == "HiredEmployees":
                 is_valid, error_message = data_validator.validate_hired_employee(transaction)
                 if is_valid:
                     success, error_message = data_inserter.insert_hired_employee(transaction)
             elif transaction_type == "Departments":
-                is_valid, error_message = DataValidator.validate_department(transaction)
+                is_valid, error_message = data_validator.validate_department(transaction)
                 if is_valid:
                     success, error_message = data_inserter.insert_department(transaction)
             elif transaction_type == "Jobs":
-                is_valid, error_message = DataValidator.validate_job(transaction)
+                is_valid, error_message = data_validator.validate_job(transaction)
                 if is_valid:
                     success, error_message = data_inserter.insert_job(transaction)
             else:
-                success = False
+                is_valid = False
                 error_message = "Invalid transaction type."
+                success = False
 
             if is_valid and success:
                 success_count += 1
@@ -57,7 +60,6 @@ def insert_data(req: func.HttpRequest) -> func.HttpResponse:
                 errors.append({"transaction": transaction, "error": error_message})
                 data_inserter.log_transaction_error(transaction_type, transaction, error_message)
 
-        # Cerrar la conexión a la base de datos
         connection.close()
 
         return func.HttpResponse(
@@ -76,5 +78,3 @@ def insert_data(req: func.HttpRequest) -> func.HttpResponse:
             status_code=500,
             mimetype="application/json"
         )
-
-

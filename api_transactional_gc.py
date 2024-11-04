@@ -26,7 +26,6 @@ class DatabaseConnection:
 
 # Validar transacciones
 class DataValidator:
-    #@staticmethod
     def __init__(self, connection):
         self.connection = connection
         self.cursor = self.connection.cursor()
