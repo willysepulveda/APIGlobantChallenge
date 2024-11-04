@@ -23,7 +23,6 @@ def insert_data(req: func.HttpRequest) -> func.HttpResponse:
                 mimetype="application/json"
             )
 
-        # Crear una instancia de DataInserter y DataValidator
         connection = DatabaseConnection().connect()
         data_inserter = DataInserter(connection)
         data_validator = DataValidator(connection)
