@@ -22,7 +22,7 @@ class DatabaseConnection:
         self.driver = '{ODBC Driver 17 for SQL Server}'
         
         # Verifica si estás en un entorno local o en la nube
-        if os.getenv("ENVIRONMENT") == "LOCAL":
+        if os.getenv("ENVIRONMENT") == "AZURE":
             # Para entorno local, usa la contraseña definida en local.settings.json
             self.password = os.getenv("SQL_PASSWORD")
         else:
