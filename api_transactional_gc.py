@@ -1,15 +1,8 @@
-import azure.functions as func
 import logging
-import pyodbc
+#import pyodbc
 import json
-import os
-from azure.identity import DefaultAzureCredential
-from azure.identity import ManagedIdentityCredential
-from azure.keyvault.secrets import SecretClient
+from fastapi import HTTPException
 from database_connection import DatabaseConnection
-
-db_connection = DatabaseConnection()
-connection = db_connection.connect ()
 
 # Validar transacciones
 class DataValidator:
@@ -47,7 +40,7 @@ class DataValidator:
             return False, "JobTitle is missing or null."
         return True, None
 
-#Insertar en BD
+# Insertar en BD
 class DataInserter:
     def __init__(self, connection):
         self.connection = connection
@@ -67,7 +60,7 @@ class DataInserter:
             return True, None 
         except Exception as e:
             logging.error(f"Error inserting employee: {str(e)}")
-            return False, str(e)     
+            return False, str(e)
 
     def insert_department(self, department):
         try:
@@ -91,20 +84,19 @@ class DataInserter:
             return True, None
         except Exception as e:
             logging.error(f"Error inserting job: {str(e)}")
-            return False, str(e)   
+            return False, str(e)
 
     def log_transaction_error(self, transaction_type, transaction_data, error_message):
-            try:
-                self.cursor.execute(
-                    "INSERT INTO GlobantPoc.TransactionLogs (TransactionType, TransactionData, ErrorMessage) VALUES (?, ?, ?)",
-                    transaction_type,
-                    json.dumps(transaction_data),
-                    error_message
-                )
-                self.connection.commit() 
-                self.connection.commit()
-            except Exception as e:
-                logging.error(f"Error logging transaction: {str(e)}")               
+        try:
+            self.cursor.execute(
+                "INSERT INTO GlobantPoc.TransactionLogs (TransactionType, TransactionData, ErrorMessage) VALUES (?, ?, ?)",
+                transaction_type,
+                json.dumps(transaction_data),
+                error_message
+            )
+            self.connection.commit()
+        except Exception as e:
+            logging.error(f"Error logging transaction: {str(e)}")
 
     def commit(self):
         self.connection.commit()
@@ -139,7 +131,7 @@ class API_Transactional_GC:
 
         for transaction in transactions:
             if transaction_type == "HiredEmployees":
-                is_valid, error_message = DataValidator.validate_hired_employee(transaction)
+                is_valid, error_message = DataValidator(connection).validate_hired_employee(transaction)
                 if not is_valid:
                     error_logger.log_error(transaction, error_message)
                     continue
@@ -174,37 +166,3 @@ class API_Transactional_GC:
             "errors": error_logger.get_errors()
         }
         return response
-
-# AF HTTP
-app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
-
-@app.route(route="InsertData")
-def insert_data(req: func.HttpRequest) -> func.HttpResponse:
-    try:
-        # Obtén el cuerpo de la solicitud
-        req_body = req.get_json()
-        transaction_type = req_body.get("transactionType")
-        transactions = req_body.get("transactions")
-
-        if not transaction_type or not transactions or not isinstance(transactions, list):
-            return func.HttpResponse(
-                json.dumps({"error": "Transaction type and a list of transactions are required"}),
-                status_code=400,
-                mimetype="application/json"
-            )
-
-        api = API_Transactional_GC()
-        result = api.process_batch(transactions, transaction_type)
-
-        return func.HttpResponse(
-            json.dumps(result),
-            status_code=200,
-            mimetype="application/json"
-        )
-    except Exception as e:
-        logging.error(f"Error: {str(e)}")
-        return func.HttpResponse(
-            json.dumps({"error": str(e)}),
-            status_code=500,
-            mimetype="application/json"
-        )

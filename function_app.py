@@ -1,28 +1,22 @@
-import azure.functions as func
-from api_transactional_gc import API_Transactional_GC, DatabaseConnection,DataInserter,DataValidator
-import json
+from fastapi import FastAPI, HTTPException, Request
+from api_transactional_gc import API_Transactional_GC, DatabaseConnection, DataInserter, DataValidator
 import logging
 
+app = FastAPI()
 
-app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
-
-
-@app.route(route="InsertData",  methods=["POST"])
-def insert_data(req: func.HttpRequest) -> func.HttpResponse:
+@app.post("/InsertData")
+async def insert_data(request: Request):
     logging.info('Processing InsertData request...')
 
     try:
-        req_body = req.get_json()
+        req_body = await request.json()
         transaction_type = req_body.get("transactionType")
         transactions = req_body.get("transactions")
 
         if not transaction_type or not transactions or not isinstance(transactions, list):
-            return func.HttpResponse(
-                json.dumps({"error": "Transaction type and a list of transactions are required"}),
-                status_code=400,
-                mimetype="application/json"
-            )
+            raise HTTPException(status_code=400, detail="Transaction type and a list of transactions are required")
 
+        # Establecer conexión a la base de datos
         connection = DatabaseConnection().connect()
         data_inserter = DataInserter(connection)
         data_validator = DataValidator(connection)
@@ -31,10 +25,12 @@ def insert_data(req: func.HttpRequest) -> func.HttpResponse:
         failure_count = 0
         errors = []
 
-        is_valid = False
-        error_message = None
-
+        # Validar y procesar las transacciones
         for transaction in transactions:
+            is_valid = False
+            error_message = None
+            success = False
+
             if transaction_type == "HiredEmployees":
                 is_valid, error_message = data_validator.validate_hired_employee(transaction)
                 if is_valid:
@@ -48,9 +44,7 @@ def insert_data(req: func.HttpRequest) -> func.HttpResponse:
                 if is_valid:
                     success, error_message = data_inserter.insert_job(transaction)
             else:
-                is_valid = False
                 error_message = "Invalid transaction type."
-                success = False
 
             if is_valid and success:
                 success_count += 1
@@ -59,21 +53,15 @@ def insert_data(req: func.HttpRequest) -> func.HttpResponse:
                 errors.append({"transaction": transaction, "error": error_message})
                 data_inserter.log_transaction_error(transaction_type, transaction, error_message)
 
+        # Cerrar la conexión a la base de datos
         connection.close()
 
-        return func.HttpResponse(
-            json.dumps({
-                "successCount": success_count,
-                "failureCount": failure_count,
-                "errors": errors
-            }),
-            status_code=200,
-            mimetype="application/json"
-        )
+        # Devolver la respuesta en formato JSON
+        return {
+            "successCount": success_count,
+            "failureCount": failure_count,
+            "errors": errors
+        }
     except Exception as e:
         logging.error(f"Error: {str(e)}")
-        return func.HttpResponse(
-            json.dumps({"error": str(e)}),
-            status_code=500,
-            mimetype="application/json"
-        )
+        raise HTTPException(status_code=500, detail=str(e))
