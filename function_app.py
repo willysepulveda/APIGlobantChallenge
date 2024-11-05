@@ -16,7 +16,6 @@ async def insert_data(request: Request):
         if not transaction_type or not transactions or not isinstance(transactions, list):
             raise HTTPException(status_code=400, detail="Transaction type and a list of transactions are required")
 
-        # Establecer conexión a la base de datos
         connection = DatabaseConnection().connect()
         data_inserter = DataInserter(connection)
         data_validator = DataValidator(connection)
@@ -53,10 +52,8 @@ async def insert_data(request: Request):
                 errors.append({"transaction": transaction, "error": error_message})
                 data_inserter.log_transaction_error(transaction_type, transaction, error_message)
 
-        # Cerrar la conexión a la base de datos
         connection.close()
 
-        # Devolver la respuesta en formato JSON
         return {
             "successCount": success_count,
             "failureCount": failure_count,
