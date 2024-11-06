@@ -8,10 +8,10 @@ import os
 import json
 
 # Carga las variables de local.settings.json manualmente
-with open("local.settings.json") as f:
-    settings = json.load(f)
-    for key, value in settings["Values"].items():
-        os.environ[key] = value
+#with open("local.settings.json") as f:
+#    settings = json.load(f)
+#    for key, value in settings["Values"].items():
+#        os.environ[key] = values
 
 class DatabaseConnection:
     def __init__(self):
