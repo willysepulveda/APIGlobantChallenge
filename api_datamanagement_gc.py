@@ -45,9 +45,8 @@ class DataBackup:
     def __init__(self):
         self.db_connection = DatabaseConnection()
         self.container_name = os.getenv("BLOB_CONTAINER_NAME")
-        self.blob_service_client = BlobServiceClient(
-            account_url=os.getenv("BLOB_STORAGE_ACCOUNT_URL"),
-            credential=DefaultAzureCredential()
+        self.blob_service_client = BlobServiceClient.from_connection_string(
+            os.getenv("BLOB_STORAGE_CONNECTION_STRING")
         )
         self.tables = ["HiredEmployees", "Departments", "Jobs"]
 
@@ -58,7 +57,17 @@ class DataBackup:
         try:
             # Obtener los datos de la tabla
             cursor.execute(f"SELECT * FROM GlobantPoc.{table_name}")
-            rows = [dict(zip([column[0] for column in cursor.description], row)) for row in cursor.fetchall()]
+            
+            # Convertir los datos a un diccionario y transformar HireDate a string
+            rows = []
+            for row in cursor.fetchall():
+                row_dict = dict(zip([column[0] for column in cursor.description], row))
+                
+                # Convierte HireDate a cadena si existe
+                if "HireDate" in row_dict and row_dict["HireDate"] is not None:
+                    row_dict["HireDate"] = str(row_dict["HireDate"])
+                
+                rows.append(row_dict)
 
             # Convertir datos a formato AVRO
             avro_schema = get_avro_schema(table_name)
@@ -93,9 +102,8 @@ class DataRestore:
     def __init__(self):
         self.db_connection = DatabaseConnection()
         self.container_name = os.getenv("BLOB_CONTAINER_NAME")
-        self.blob_service_client = BlobServiceClient(
-            account_url=os.getenv("BLOB_STORAGE_ACCOUNT_URL"),
-            credential=DefaultAzureCredential()
+        self.blob_service_client = BlobServiceClient.from_connection_string(
+            os.getenv("BLOB_STORAGE_CONNECTION_STRING")
         )
         self.tables = ["HiredEmployees", "Departments", "Jobs"]
 
@@ -111,6 +119,10 @@ class DataRestore:
             # Leer los datos desde el archivo AVRO
             avro_buffer = BytesIO(avro_data)
             avro_reader = reader(avro_buffer)
+
+            # Activar IDENTITY_INSERT si es necesario
+            if table_name in ["Departments", "Jobs"]:
+                cursor.execute(f"SET IDENTITY_INSERT GlobantPoc.{table_name} ON")
 
             # Insertar datos en la tabla correspondiente
             for record in avro_reader:
@@ -129,6 +141,10 @@ class DataRestore:
                         "INSERT INTO GlobantPoc.Jobs (JobID, JobTitle) VALUES (?, ?)",
                         record["JobID"], record["JobTitle"]
                     )
+
+            # Desactivar IDENTITY_INSERT
+            if table_name in ["Departments", "Jobs"]:
+                cursor.execute(f"SET IDENTITY_INSERT GlobantPoc.{table_name} OFF")
 
             connection.commit()
             logging.info(f"Restore for table {table_name} completed.")

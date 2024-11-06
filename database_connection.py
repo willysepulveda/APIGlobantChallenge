@@ -11,7 +11,7 @@ import json
 #with open("local.settings.json") as f:
 #    settings = json.load(f)
 #    for key, value in settings["Values"].items():
-#        os.environ[key] = values
+#        os.environ[key] = value
 
 class DatabaseConnection:
     def __init__(self):
@@ -21,7 +21,7 @@ class DatabaseConnection:
         self.username = os.getenv("SQL_USERNAME")
         self.driver = '{ODBC Driver 17 for SQL Server}'
         
-        if os.getenv("ENVIRONMENT") == "LOCAL":
+        if os.getenv("ENVIRONMENT") == "AZURE":
             self.password = os.getenv("SQL_PASSWORD")
         else:
             credential = DefaultAzureCredential()
