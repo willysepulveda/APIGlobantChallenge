@@ -1,6 +1,8 @@
 from fastapi import FastAPI, HTTPException, Request
 from api_transactional_gc import API_Transactional_GC, DatabaseConnection, DataInserter, DataValidator
 import logging
+from api_datamanagement_gc import DataBackup, DataRestore
+
 
 app = FastAPI()
 
@@ -61,4 +63,38 @@ async def insert_data(request: Request):
         }
     except Exception as e:
         logging.error(f"Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.post("/BackupData")
+async def backup_data(request: Request):
+    try:
+        req_body = await request.json()
+        table_name = req_body.get("tableName", "all") 
+        data_backup = DataBackup()
+        
+        if table_name == "all":
+            result = data_backup.backup_all_tables()
+        else:
+            result = data_backup.backup_table(table_name)
+        
+        return result
+    except Exception as e:
+        logging.error(f"Error during backup: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/RestoreData")
+async def restore_data(request: Request):
+    try:
+        req_body = await request.json()
+        table_name = req_body.get("tableName", "all")
+        data_restore = DataRestore()
+        
+        if table_name == "all":
+            result = data_restore.restore_all_tables()
+        else:
+            result = data_restore.restore_table(table_name)
+        
+        return result
+    except Exception as e:
+        logging.error(f"Error during restore: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
