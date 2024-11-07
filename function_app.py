@@ -2,7 +2,9 @@ from fastapi import FastAPI, HTTPException, Request
 from api_transactional_gc import API_Transactional_GC, DatabaseConnection, DataInserter, DataValidator
 import logging
 from api_datamanagement_gc import DataBackup, DataRestore
+from api_reporting_gc import APIReportingGC 
 
+reporting_api = APIReportingGC()
 
 app = FastAPI()
 
@@ -98,3 +100,21 @@ async def restore_data(request: Request):
     except Exception as e:
         logging.error(f"Error during restore: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/EmployeeHiresByQuarter")
+async def employee_hires_by_quarter():
+    try:
+        result = reporting_api.get_employee_hires_by_quarter()
+        return result
+    except HTTPException as e:
+        logging.error(f"Error in EmployeeHiresByQuarter endpoint: {e.detail}")
+        raise e
+
+@app.get("/DepartmentsAboveAverage")
+async def departments_above_average():
+    try:
+        result = reporting_api.get_departments_above_average_hires()
+        return result
+    except HTTPException as e:
+        logging.error(f"Error in DepartmentsAboveAverage endpoint: {e.detail}")
+        raise e
