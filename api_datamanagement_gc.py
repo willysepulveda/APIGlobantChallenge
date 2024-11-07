@@ -55,15 +55,12 @@ class DataBackup:
         cursor = connection.cursor()
 
         try:
-            # Obtener los datos de la tabla
             cursor.execute(f"SELECT * FROM GlobantPoc.{table_name}")
             
-            # Convertir los datos a un diccionario y transformar HireDate a string
             rows = []
             for row in cursor.fetchall():
                 row_dict = dict(zip([column[0] for column in cursor.description], row))
                 
-                # Convierte HireDate a cadena si existe
                 if "HireDate" in row_dict and row_dict["HireDate"] is not None:
                     row_dict["HireDate"] = str(row_dict["HireDate"])
                 
@@ -97,7 +94,6 @@ class DataBackup:
             results.append(result)
         return results
 
-# Clase para manejar la restauración de datos
 class DataRestore:
     def __init__(self):
         self.db_connection = DatabaseConnection()
